@@ -25,7 +25,7 @@ class User {
         # documents: list[Document]
         # memberships: list[GroupMembership]
         # annotations: list[Annotation]
-        # groups: list[Group] (viewonly, via GroupMembership)
+        # groups: list[Group]
 }
 
 class Group {
@@ -36,7 +36,7 @@ class Group {
     - updated_at : datetime
     ____
         **Relationships**
-        # owner: User (viewonly, via GroupMembership, role=owner)
+        # owner: User
         # documents: list[Document]
         # memberships: list[GroupMembership]
     ____
@@ -51,6 +51,7 @@ enum Permission {
     view_public_annotation_user
     view_restricted_annotations
     view_restricted_annotation_user
+    endorse_comments
     manage_members
     manage_permissions
     upload_documents
@@ -58,10 +59,16 @@ enum Permission {
     modify_documents
 }
 
+enum ViewMode {
+    private
+    anonymous
+    public
+}
+
 class GroupMembership {
     - user_id : int [PK, FK]
     - group_id : int [PK, FK]
-    - permissions: set<Permission>
+    - permissions: set[Permission]
     - created_at : datetime
     - updated_at : datetime
     ____
@@ -73,7 +80,8 @@ class GroupMembership {
 class Document {
     - id : int [PK]
     - s3_key : string
-    - size_bytes : int [DEFAULT: 0]
+    - size_bytes : int
+    - view_mode : ViewMode
     - user_id : int [FK, NULLABLE]
     - group_id : int [FK, NULLABLE]
     - secret : uuid
@@ -89,7 +97,7 @@ class Document {
         # owner_xor: user_id XOR group_id
 }
 
-enum VisibilityType {
+enum Visibility {
     private
     restricted
     public
@@ -98,34 +106,56 @@ enum VisibilityType {
 class Annotation {
     - id : int [PK]
     - document_id : int [FK]
+    - comment_id : int [FK]
     - user_id : int [FK, NULLABLE]
     - anon_id : uuid
     - anon_alias : string [NULLABLE]
-    - type : VisibilityType
-    - line : int
-    - length : int
-    - comment : string
+    - meta_data : jsonb
     - created_at : datetime
     - updated_at : datetime
     ____
         **Relationships**
         # document: Document
         # user: User [nullable]
+        # comment: Comment
+}
+
+class Comment {
+    - id : int [PK]
+    - visibility : Visibility
+    - document_id : int [FK]
+    - annotation_id : int [FK, NULLABLE]
+    - user_id : int [FK, NULLABLE]
+    - anon_id : uuid
+    - endorsements : int
+    - anon_alias : string [NULLABLE]
+    - parent_id : int [FK, NULLABLE]
+    - content : string [NULLABLE]
+    - created_at : datetime
+    - updated_at : datetime
+    ____
+        **Relationships**
+        # document: Document
+        # annotation: Annotation [nullable]
+        # user: User [nullable]
+        # parent: Comment [nullable]
+        # replies: list[Comment]
 }
 
 ' ========== RELATIONSHIPS ==========
 
-User "1" -r-> "*" Document
-User "1" -r-> "*" GroupMembership
-User "1" -r-> "*" Annotation
+User -d-> Document
+User -r-> GroupMembership
 
-Group "1" -u-> "*" GroupMembership
-Group "1" -r-> "*" Document
+Group -u-> GroupMembership
+Group -l-> Document
 
-Document "1" -d-> "*" Annotation
 
 GroupMembership -[hidden]r-> Permission
 
-Annotation -[hidden]r-> VisibilityType
+Comment -[hidden]l-> Visibility
+Document -[hidden]l-> ViewMode
+Annotation <-l- Comment
+Document -d-> Comment
 
 @enduml
